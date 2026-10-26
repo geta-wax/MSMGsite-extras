@@ -2,7 +2,7 @@
   <img src="https://i.imgflip.com/b4dimn.jpg" alt="MSMGsite extras logo" width="120">
 </p>
 
-<h1 align="center">MSMGsite-extras</h1>
+<h1 align="center">MSMGsite extras</h1>
 Mods and other stuff for MSMGsite. Made with 70% AI and 30% idiot.
 
 > **Status:** v0.1 beta. Expect better updates in the future.
