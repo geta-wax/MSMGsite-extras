@@ -1,8 +1,8 @@
 {
   "latest": {
     "version": "0.1.0",
-    "url": "https://github.com/YOUR-USERNAME/MSMGsite-extras",
-    "notes": "Describe what is new in the latest version here."
+    "url": "https://github.com/geta-wax/MSMGsite-extras",
+    "notes": "Added announcements"
   },
   "messages": [
     {
@@ -10,7 +10,7 @@
       "type": "info",
       "date": "2026-10-27",
       "title": "Welcome to MSMGsite extras!",
-      "body": "Thanks for trying the beta. Announcements and updates will show up here."
+      "body": "Thanks for trying the beta. Update notifications will show up here."
     }
   ]
 }
