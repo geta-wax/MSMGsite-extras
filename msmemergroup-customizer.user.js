@@ -16,14 +16,14 @@
 
 (function () {
   'use strict';
- 
+
   /* ---------- settings ---------- */
   const DEFAULTS = { font: '', googleFont: false, fontSize: 100, packId: 'none', customCss: '', packs: {} };
   let state = Object.assign({}, DEFAULTS, GM_getValue('settings', {}));
   state.packs = state.packs || {};
   const save = () => GM_setValue('settings', state);
- 
- 
+
+
   /* ---------- built-in packs ---------- */
   // A pack is: { name, author, css, font? }
   const BUILTIN = {
@@ -44,23 +44,23 @@ a{color:#9dffb5 !important}`
 a{color:#8a4b14 !important}`
     }
   };
- 
+
   const getPack = (id) => BUILTIN[id] || state.packs[id] || null;
- 
+
   /* ---------- css building ---------- */
   // Strip the most obviously risky things from third-party CSS.
   const clean = (css) => String(css)
     .replace(/@import[^;]*;?/gi, '')
     .replace(/expression\s*\(/gi, '')
     .replace(/javascript:/gi, '');
- 
+
   const cssFont = (name) => "'" + String(name).replace(/['"\\;{}<>]/g, '') + "'";
- 
+
   function buildCss() {
     const pack = getPack(state.packId);
     let css = '';
     if (pack) css += clean(pack.css) + '\n';
- 
+
     const font = state.font || (pack && pack.font) || '';
     if (font) {
       css += 'body, body *:not([class*="icon" i]):not(.fa):not(.fas):not(.far):not(.fab):not(.material-icons):not(code):not(pre)' +
@@ -72,17 +72,17 @@ a{color:#8a4b14 !important}`
     if (state.customCss) css += clean(state.customCss) + '\n';
     return css;
   }
- 
+
   /* ---------- applying ---------- */
   const styleEl = document.createElement('style');
   styleEl.id = 'msmg-customizer-style';
   const fontLink = document.createElement('link');
   fontLink.rel = 'stylesheet';
- 
+
   function apply() {
     styleEl.textContent = buildCss();
     if (!styleEl.isConnected) document.documentElement.appendChild(styleEl);
- 
+
     if (state.googleFont && state.font) {
       fontLink.href = 'https://fonts.googleapis.com/css2?family=' +
         encodeURIComponent(state.font).replace(/%20/g, '+') + '&display=swap';
@@ -91,9 +91,9 @@ a{color:#8a4b14 !important}`
       fontLink.remove();
     }
   }
- 
+
   apply(); // run immediately at document-start to avoid a flash of the default look
- 
+
   /* ---------- pack import ---------- */
   function importText(text, fallbackName) {
     text = String(text || '').trim();
@@ -102,7 +102,7 @@ a{color:#8a4b14 !important}`
     try { pack = JSON.parse(text); }
     catch (e) { pack = { name: fallbackName || 'Imported pack', author: 'unknown', css: text }; }
     if (!pack || typeof pack.css !== 'string') throw new Error('A pack needs a "css" field.');
- 
+
     const name = String(pack.name || 'Imported pack').slice(0, 60);
     const id = 'user-' + (name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'pack');
     state.packs[id] = {
@@ -113,14 +113,14 @@ a{color:#8a4b14 !important}`
     save(); apply();
     return name;
   }
- 
+
   /* ---------- announcements (broadcast) ---------- */
   const VERSION = '0.1.0';
   // Point this at the RAW announcements.json in your GitHub repo (replace YOUR-USERNAME).
-  const ANNOUNCEMENTS_URL = 'https://raw.githubusercontent.com/YOUR-USERNAME/MSMGsite-extras/main/announcements.json';
+  const ANNOUNCEMENTS_URL = 'https://raw.githubusercontent.com/geta-wax/MSMGsite-extras/main/announcements.json';
   const CHECK_EVERY_MS = 10 * 60 * 1000; // don't check more than once per 10 minutes
   const EMPTY_NEWS = { messages: [], latest: null };
- 
+
   const newerThan = (a, b) => { // is version a newer than version b?
     const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
     for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -129,9 +129,9 @@ a{color:#8a4b14 !important}`
     }
     return false;
   };
- 
+
   const httpsOnly = (u) => (/^https:\/\//i.test(u || '') ? String(u) : '');
- 
+
   // Everything from the remote file is treated as untrusted: trimmed, typed, and later shown as plain text only.
   function parseAnnouncements(text) {
     const data = JSON.parse(text);
@@ -154,7 +154,7 @@ a{color:#8a4b14 !important}`
       : null;
     return { messages, latest };
   }
- 
+
   function loadAnnouncements(done, force) {
     const cached = GM_getValue('annCache', null);
     if (/YOUR-USERNAME/.test(ANNOUNCEMENTS_URL)) {
@@ -185,7 +185,7 @@ a{color:#8a4b14 !important}`
       ontimeout: () => fail('Timed out reaching GitHub.')
     });
   }
- 
+
   /* ---------- logo ---------- */
   // Fetched through Tampermonkey (so the site's image restrictions can't block it) and cached as a data URL.
   const LOGO_URL = 'https://i.imgflip.com/b4dimn.jpg';
@@ -203,14 +203,14 @@ a{color:#8a4b14 !important}`
       onerror: () => { /* no logo, the title still shows */ }
     });
   }
- 
+
   /* ---------- UI (shadow DOM so site themes never restyle it) ---------- */
   function buildUi() {
     if (document.getElementById('msmg-host')) return;
     const host = document.createElement('div');
     host.id = 'msmg-host';
     const root = host.attachShadow({ mode: 'open' });
- 
+
     root.innerHTML = `
 <style>
   :host { all: initial; }
@@ -235,7 +235,7 @@ a{color:#8a4b14 !important}`
   label { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
   #msg { margin-top: 8px; color: #9fd; min-height: 1em; }
   .row { display: flex; gap: 6px; }
- 
+
   #badge { position: absolute; top: -5px; right: -5px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px;
            background: #e5484d; color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }
   #badge[hidden], #toast[hidden], #news[hidden] { display: none; }
@@ -257,9 +257,9 @@ a{color:#8a4b14 !important}`
 <div id="toast" hidden></div>
 <div id="panel" hidden>
   <div class="head"><img id="logo" alt="" hidden><div><h3>MSMGsite extras</h3><div class="ver">version 0.1 beta</div></div></div>
- 
+
   <div id="news"></div>
- 
+
   <h4>Font</h4>
   <input type="text" id="font" list="fonts" placeholder="Default (site font)">
   <datalist id="fonts">
@@ -269,26 +269,26 @@ a{color:#8a4b14 !important}`
   <label><input type="checkbox" id="gfont"> Load from Google Fonts</label>
   <h4>Text size: <span id="sizeVal"></span>%</h4>
   <input type="range" id="size" min="70" max="160" step="5" style="width:100%">
- 
+
   <h4>Texture pack</h4>
   <div class="row"><select id="pack"></select><button class="b" id="delPack" title="Delete imported pack">🗑</button></div>
- 
+
   <h4>Import a pack</h4>
   <textarea id="paste" placeholder='Paste pack JSON {"name":"...","author":"...","css":"..."} or raw CSS'></textarea>
   <button class="b" id="importPaste">Import pasted</button>
   <div class="row" style="margin-top:6px"><input type="text" id="url" placeholder="https://… (pack JSON or .css)"><button class="b" id="importUrl">Fetch</button></div>
- 
+
   <h4>Your own CSS</h4>
   <textarea id="css" placeholder="Extra CSS applied last"></textarea>
- 
+
   <button class="b" id="reset">Reset everything</button>
   <div id="msg"></div>
 </div>`;
- 
+
     const $ = (s) => root.querySelector(s);
     const msg = (t) => { $('#msg').textContent = t; };
     loadLogo($('#logo'));
- 
+
     function refreshPacks() {
       const sel = $('#pack');
       sel.innerHTML = '';
@@ -299,7 +299,7 @@ a{color:#8a4b14 !important}`
       sel.value = getPack(state.packId) ? state.packId : 'none';
       $('#delPack').disabled = !state.packs[sel.value];
     }
- 
+
     function syncFields() {
       $('#font').value = state.font;
       $('#gfont').checked = state.googleFont;
@@ -308,9 +308,9 @@ a{color:#8a4b14 !important}`
       $('#css').value = state.customCss;
       refreshPacks();
     }
- 
+
     const change = () => { save(); apply(); };
- 
+
     $('#gear').addEventListener('click', () => {
       const p = $('#panel'); p.hidden = !p.hidden;
       if (!p.hidden) openedPanel();
@@ -328,12 +328,12 @@ a{color:#8a4b14 !important}`
       delete state.packs[state.packId]; state.packId = 'none'; change(); refreshPacks(); msg('Pack deleted.');
     });
     $('#css').addEventListener('input', (e) => { state.customCss = e.target.value; change(); });
- 
+
     $('#importPaste').addEventListener('click', () => {
       try { const n = importText($('#paste').value); $('#paste').value = ''; refreshPacks(); msg('Imported "' + n + '" and applied it.'); }
       catch (err) { msg(err.message); }
     });
- 
+
     $('#importUrl').addEventListener('click', () => {
       const url = $('#url').value.trim();
       if (!/^https:\/\//i.test(url)) { msg('Please use an https:// URL.'); return; }
@@ -350,13 +350,13 @@ a{color:#8a4b14 !important}`
         onerror: () => msg('Could not fetch that URL.')
       });
     });
- 
+
     $('#reset').addEventListener('click', () => {
       if (!confirm('Reset all Customizer settings and imported packs?')) return;
       state = Object.assign({}, DEFAULTS, { packs: {} });
       change(); syncFields(); msg('Reset.');
     });
- 
+
     /* ----- announcements ----- */
     let news = EMPTY_NEWS;
     let newsStatus = 'Checking…';
@@ -364,26 +364,26 @@ a{color:#8a4b14 !important}`
     const unread = () => { const r = readSet(); return news.messages.filter((m) => !r.has(m.id)); };
     const updateAvailable = () => !!(news.latest && newerThan(news.latest.version, VERSION));
     const updateUnseen = () => updateAvailable() && GM_getValue('annUpdateSeen', '') !== news.latest.version;
- 
+
     function updateBadge() {
       const n = unread().length + (updateUnseen() ? 1 : 0);
       const b = $('#badge');
       b.hidden = n === 0;
       b.textContent = n > 9 ? '9+' : String(n);
     }
- 
+
     function markAllRead() {
       GM_setValue('annRead', news.messages.map((m) => m.id));
       if (news.latest) GM_setValue('annUpdateSeen', news.latest.version);
     }
- 
+
     function renderNews() {
       const box = $('#news');
       box.innerHTML = '';
       const r = readSet();
       const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; };
       const link = (url, label) => { const a = el('a', 'lnk', label); a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer'; return a; };
- 
+
       if (updateAvailable()) {
         const d = el('div', 'note update' + (updateUnseen() ? ' fresh' : ''));
         d.appendChild(el('b', '', 'Update available: v' + news.latest.version));
@@ -407,14 +407,14 @@ a{color:#8a4b14 !important}`
       again.addEventListener('click', () => { newsStatus = 'Checking…'; renderNews(); fetchNews(true); });
       box.appendChild(again);
     }
- 
+
     function openedPanel() {
       $('#toast').hidden = true;
       renderNews();     // shows new items highlighted...
       markAllRead();    // ...then marks them as read
       updateBadge();
     }
- 
+
     let toastTimer = null;
     function showToast() {
       const fresh = unread();
@@ -430,7 +430,7 @@ a{color:#8a4b14 !important}`
       toastTimer = setTimeout(() => { t.hidden = true; }, 10000);
     }
     $('#toast').addEventListener('click', () => { $('#panel').hidden = false; openedPanel(); });
- 
+
     function fetchNews(force) {
       loadAnnouncements((data, status) => {
         news = data;
@@ -441,17 +441,16 @@ a{color:#8a4b14 !important}`
       }, force);
     }
     fetchNews(false);
- 
+
     syncFields();
     document.documentElement.appendChild(host);
   }
- 
+
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', buildUi);
   else buildUi();
- 
+
   GM_registerMenuCommand('Open MSMGsite extras', () => {
     const host = document.getElementById('msmg-host');
     if (host && host.shadowRoot.querySelector('#panel').hidden) host.shadowRoot.querySelector('#gear').click();
   });
 })();
- 
