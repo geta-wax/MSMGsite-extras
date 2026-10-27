@@ -5,13 +5,13 @@
 // @description  Mods and other stuff for MSMGsite. Made with 70% AI and 30% idiot
 // @author       getawax.mp4
 // @match        https://msmemergroup.com/*
-// @icon         https://i.imgflip.com/b4dimn.jpg
 // @run-at       document-start
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_registerMenuCommand
 // @grant        GM_xmlhttpRequest
 // @connect      *
+// @connect      raw.githubusercontent.com
 // ==/UserScript==
 
 (function () {
@@ -155,21 +155,34 @@ a{color:#8a4b14 !important}`
     return { messages, latest };
   }
  
-  function loadAnnouncements(done) {
+  function loadAnnouncements(done, force) {
     const cached = GM_getValue('annCache', null);
-    if (/YOUR-USERNAME/.test(ANNOUNCEMENTS_URL)) { done(EMPTY_NEWS); return; } // not set up yet
-    if (cached && Date.now() - GM_getValue('annChecked', 0) < CHECK_EVERY_MS) { done(cached); return; }
+    if (/YOUR-USERNAME/.test(ANNOUNCEMENTS_URL)) {
+      done(EMPTY_NEWS, 'Not set up yet: replace YOUR-USERNAME in ANNOUNCEMENTS_URL at the top of the script.');
+      return;
+    }
+    const age = Date.now() - GM_getValue('annChecked', 0);
+    if (!force && cached && age < CHECK_EVERY_MS) {
+      done(cached, 'Up to date (checked ' + Math.max(1, Math.round(age / 60000)) + ' min ago).');
+      return;
+    }
     GM_setValue('annChecked', Date.now());
+    const fail = (why) => done(cached || EMPTY_NEWS, why);
     GM_xmlhttpRequest({
-      method: 'GET', url: ANNOUNCEMENTS_URL + '?t=' + Date.now(),
+      method: 'GET', url: ANNOUNCEMENTS_URL + '?t=' + Date.now(), timeout: 15000,
       onload: (r) => {
+        if (r.status !== 200) {
+          fail('Could not load announcements (HTTP ' + r.status + '). Check the URL, that the repo is public, and that the file is on the main branch.');
+          return;
+        }
         try {
           const parsed = parseAnnouncements(r.responseText);
           GM_setValue('annCache', parsed);
-          done(parsed);
-        } catch (e) { done(cached || EMPTY_NEWS); }
+          done(parsed, 'Loaded ' + parsed.messages.length + ' message(s).');
+        } catch (e) { fail('announcements.json has a formatting error: ' + e.message); }
       },
-      onerror: () => done(cached || EMPTY_NEWS)
+      onerror: () => fail('Could not reach GitHub. If Tampermonkey asked for permission, choose "Always allow".'),
+      ontimeout: () => fail('Timed out reaching GitHub.')
     });
   }
  
@@ -237,6 +250,7 @@ a{color:#8a4b14 !important}`
   .nt { display: flex; justify-content: space-between; gap: 8px; }
   .nd { color: #999; font-size: 11px; white-space: nowrap; }
   .nb { margin-top: 3px; color: #ccc; white-space: pre-wrap; }
+  .status { color: #888; font-size: 11px; margin-top: 8px; }
   .lnk { display: inline-block; margin-top: 4px; color: #6cb6ff; font-size: 12px; }
 </style>
 <button id="gear" title="MSMGsite extras">🎨<span id="badge" hidden></span></button>
@@ -244,7 +258,7 @@ a{color:#8a4b14 !important}`
 <div id="panel" hidden>
   <div class="head"><img id="logo" alt="" hidden><div><h3>MSMGsite extras</h3><div class="ver">version 0.1 beta</div></div></div>
  
-  <div id="news" hidden></div>
+  <div id="news"></div>
  
   <h4>Font</h4>
   <input type="text" id="font" list="fonts" placeholder="Default (site font)">
@@ -345,6 +359,7 @@ a{color:#8a4b14 !important}`
  
     /* ----- announcements ----- */
     let news = EMPTY_NEWS;
+    let newsStatus = 'Checking…';
     const readSet = () => new Set(GM_getValue('annRead', []));
     const unread = () => { const r = readSet(); return news.messages.filter((m) => !r.has(m.id)); };
     const updateAvailable = () => !!(news.latest && newerThan(news.latest.version, VERSION));
@@ -386,8 +401,11 @@ a{color:#8a4b14 !important}`
         if (m.link) d.appendChild(link(m.link, 'Open link'));
         box.appendChild(d);
       });
-      if (box.childNodes.length) box.prepend(el('h4', '', 'Announcements'));
-      box.hidden = !box.childNodes.length;
+      box.prepend(el('h4', '', 'Announcements'));
+      box.appendChild(el('div', 'status', newsStatus));
+      const again = el('button', 'b', 'Check now');
+      again.addEventListener('click', () => { newsStatus = 'Checking…'; renderNews(); fetchNews(true); });
+      box.appendChild(again);
     }
  
     function openedPanel() {
@@ -413,12 +431,16 @@ a{color:#8a4b14 !important}`
     }
     $('#toast').addEventListener('click', () => { $('#panel').hidden = false; openedPanel(); });
  
-    loadAnnouncements((data) => {
-      news = data;
-      updateBadge();
-      if (!$('#panel').hidden) openedPanel();
-      else showToast();
-    });
+    function fetchNews(force) {
+      loadAnnouncements((data, status) => {
+        news = data;
+        newsStatus = status;
+        updateBadge();
+        if (!$('#panel').hidden) openedPanel();
+        else showToast();
+      }, force);
+    }
+    fetchNews(false);
  
     syncFields();
     document.documentElement.appendChild(host);
