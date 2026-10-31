@@ -5,7 +5,7 @@
 <h1 align="center">MSMGsite extras</h1>
 Mods and other stuff for MSMGsite. Made with 70% AI and 30% idiot.
 
-> **Status:** v0.1 beta. Expect better updates in the future.
+> **Status:** v0.2 beta. Expect better updates in the future.
 
 ## Features
 
