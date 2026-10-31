@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MSMGsite extras
 // @namespace    http://tampermonkey.net/
-// @version      0.1
+// @version      0.2
 // @description  Mods and other stuff for MSMGsite. Made with 70% AI and 30% idiot
 // @author       getawax.mp4
 // @match        https://msmemergroup.com/*
@@ -18,7 +18,8 @@
   'use strict';
 
   /* ---------- settings ---------- */
-  const DEFAULTS = { font: '', googleFont: false, fontSize: 100, packId: 'none', customCss: '', packs: {} };
+  const DEFAULTS = { font: '', googleFont: false, fontSize: 100, packId: 'none', customCss: '', packs: {},
+                     pasteEnabled: true, pasteTitle: 'Untitled' };
   let state = Object.assign({}, DEFAULTS, GM_getValue('settings', {}));
   state.packs = state.packs || {};
   const save = () => GM_setValue('settings', state);
@@ -204,6 +205,112 @@ a{color:#8a4b14 !important}`
     });
   }
 
+  /* ---------- paste / drop images on the Create Post page ---------- */
+  let notify = () => {}; // replaced with an on-screen message once the UI exists
+
+  const onCreatePage = () => /^\/create\b/i.test(location.pathname);
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const norm = (el) => String(el.textContent || el.value || '').replace(/\s+/g, ' ').trim();
+  const isUploadLabel = (t) => /^upload image$/i.test(t) || (t.length <= 25 && /upload image/i.test(t));
+
+  async function waitFor(fn, ms) {
+    const start = Date.now();
+    while (Date.now() - start < ms) { const v = fn(); if (v) return v; await sleep(100); }
+    return null;
+  }
+
+  // Selects the "Upload Image" post type, whether it's a radio, button, tab, label or dropdown option.
+  function chooseUploadType() {
+    for (const lab of document.querySelectorAll('label')) {
+      if (isUploadLabel(norm(lab))) { (lab.control || lab.querySelector('input') || lab).click(); return true; }
+    }
+    for (const b of document.querySelectorAll('button, [role=button], [role=tab], a, input[type=button], input[type=radio]')) {
+      if (isUploadLabel(norm(b))) { b.click(); return true; }
+    }
+    for (const o of document.querySelectorAll('select option')) {
+      if (isUploadLabel(norm(o))) {
+        const sel = o.closest('select');
+        sel.value = o.value;
+        sel.dispatchEvent(new Event('input', { bubbles: true }));
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+        return true;
+      }
+    }
+    return false;
+  }
+
+  const findFileInput = () => Array.from(document.querySelectorAll('input[type=file]'))
+    .find((i) => !i.disabled && (!i.accept || /image|png|jpe?g|gif|webp/i.test(i.accept)));
+
+  function findTitleInput() {
+    const direct = document.querySelector(
+      'input[name*="title" i], input[id*="title" i], input[placeholder*="title" i], textarea[name*="title" i]');
+    if (direct) return direct;
+    // Fall back to "the first text box after a heading that just says Title".
+    for (const h of document.querySelectorAll('h1, h2, h3, h4, h5, label, p, span, div')) {
+      if (h.children.length || !/^title$/i.test(norm(h))) continue;
+      let n = h.nextElementSibling;
+      for (let i = 0; n && i < 3; i++, n = n.nextElementSibling) {
+        const sel = 'input[type=text], input:not([type]), textarea';
+        const inp = n.matches(sel) ? n : n.querySelector(sel);
+        if (inp) return inp;
+      }
+    }
+    return null;
+  }
+
+  function setValue(inp, v) {
+    inp.value = v;
+    inp.dispatchEvent(new Event('input', { bubbles: true }));
+    inp.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  async function attachImage(file) {
+    chooseUploadType();
+    await sleep(150);
+    const input = await waitFor(findFileInput, 3000);
+    if (!input) { notify('Could not find the image upload box on this page.'); return; }
+    try {
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      input.files = dt.files;
+    } catch (e) { notify('Your browser would not let the script attach the image.'); return; }
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+
+    const title = findTitleInput();
+    const preset = String(state.pasteTitle || '').trim();
+    let titled = false;
+    if (title && !title.value.trim() && preset) { setValue(title, preset); titled = true; }
+    notify('Image attached' + (titled ? ' and title filled in' : '') + '. Check the boxes, then submit when you\u2019re ready.');
+  }
+
+  const imageFromClipboard = (items) => {
+    for (const it of items || []) if (it.kind === 'file' && /^image\//i.test(it.type)) return it.getAsFile();
+    return null;
+  };
+
+  document.addEventListener('paste', (e) => {
+    if (!state.pasteEnabled || !onCreatePage()) return;
+    const f = imageFromClipboard(e.clipboardData && e.clipboardData.items);
+    if (!f) return; // plain text pastes behave normally
+    e.preventDefault();
+    const ext = (f.type.split('/')[1] || 'png').replace('jpeg', 'jpg').replace(/[^a-z0-9]/gi, '');
+    attachImage(new File([f], 'pasted-' + Date.now() + '.' + ext, { type: f.type }));
+  }, true);
+
+  const dragHasFiles = (e) => Array.from((e.dataTransfer && e.dataTransfer.types) || []).includes('Files');
+  document.addEventListener('dragover', (e) => {
+    if (state.pasteEnabled && onCreatePage() && dragHasFiles(e)) e.preventDefault();
+  });
+  document.addEventListener('drop', (e) => {
+    if (!state.pasteEnabled || !onCreatePage()) return;
+    const f = Array.from((e.dataTransfer && e.dataTransfer.files) || []).find((x) => /^image\//i.test(x.type));
+    if (!f) return;
+    e.preventDefault();
+    attachImage(f);
+  });
+
   /* ---------- UI (shadow DOM so site themes never restyle it) ---------- */
   function buildUi() {
     if (document.getElementById('msmg-host')) return;
@@ -238,7 +345,7 @@ a{color:#8a4b14 !important}`
 
   #badge { position: absolute; top: -5px; right: -5px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px;
            background: #e5484d; color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }
-  #badge[hidden], #toast[hidden], #news[hidden] { display: none; }
+  #badge[hidden], #toast[hidden], #news[hidden], #flash[hidden] { display: none; }
   #toast { position: fixed; right: 14px; bottom: 62px; z-index: 2147483647; max-width: 260px; cursor: pointer;
            background: #1b1b1f; color: #eee; border: 1px solid #555; border-left: 3px solid #4da3ff; border-radius: 8px;
            padding: 8px 10px; font-size: 13px; box-shadow: 0 6px 24px rgba(0,0,0,.5); }
@@ -251,10 +358,14 @@ a{color:#8a4b14 !important}`
   .nd { color: #999; font-size: 11px; white-space: nowrap; }
   .nb { margin-top: 3px; color: #ccc; white-space: pre-wrap; }
   .status { color: #888; font-size: 11px; margin-top: 8px; }
+  #flash { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 2147483647; max-width: 90vw;
+           background: #1b1b1f; color: #eee; border: 1px solid #555; border-left: 3px solid #3fb950; border-radius: 8px;
+           padding: 8px 12px; font-size: 13px; box-shadow: 0 6px 24px rgba(0,0,0,.5); }
   .lnk { display: inline-block; margin-top: 4px; color: #6cb6ff; font-size: 12px; }
 </style>
 <button id="gear" title="MSMGsite extras">🎨<span id="badge" hidden></span></button>
 <div id="toast" hidden></div>
+<div id="flash" hidden></div>
 <div id="panel" hidden>
   <div class="head"><img id="logo" alt="" hidden><div><h3>MSMGsite extras</h3><div class="ver">version 0.1 beta</div></div></div>
 
@@ -269,6 +380,10 @@ a{color:#8a4b14 !important}`
   <label><input type="checkbox" id="gfont"> Load from Google Fonts</label>
   <h4>Text size: <span id="sizeVal"></span>%</h4>
   <input type="range" id="size" min="70" max="160" step="5" style="width:100%">
+
+  <h4>Paste images</h4>
+  <label><input type="checkbox" id="pasteOn"> Paste (Ctrl+V) or drop images on the Create Post page</label>
+  <input type="text" id="pasteTitle" placeholder="Preset title (only used if Title is empty)" style="margin-top:6px">
 
   <h4>Texture pack</h4>
   <div class="row"><select id="pack"></select><button class="b" id="delPack" title="Delete imported pack">🗑</button></div>
@@ -288,6 +403,14 @@ a{color:#8a4b14 !important}`
     const $ = (s) => root.querySelector(s);
     const msg = (t) => { $('#msg').textContent = t; };
     loadLogo($('#logo'));
+    let flashTimer = null;
+    notify = (text) => {
+      const f = $('#flash');
+      f.textContent = text;
+      f.hidden = false;
+      clearTimeout(flashTimer);
+      flashTimer = setTimeout(() => { f.hidden = true; }, 6000);
+    };
 
     function refreshPacks() {
       const sel = $('#pack');
@@ -306,6 +429,8 @@ a{color:#8a4b14 !important}`
       $('#size').value = state.fontSize;
       $('#sizeVal').textContent = state.fontSize;
       $('#css').value = state.customCss;
+      $('#pasteOn').checked = state.pasteEnabled;
+      $('#pasteTitle').value = state.pasteTitle;
       refreshPacks();
     }
 
@@ -328,6 +453,8 @@ a{color:#8a4b14 !important}`
       delete state.packs[state.packId]; state.packId = 'none'; change(); refreshPacks(); msg('Pack deleted.');
     });
     $('#css').addEventListener('input', (e) => { state.customCss = e.target.value; change(); });
+    $('#pasteOn').addEventListener('change', (e) => { state.pasteEnabled = e.target.checked; change(); });
+    $('#pasteTitle').addEventListener('input', (e) => { state.pasteTitle = e.target.value; change(); });
 
     $('#importPaste').addEventListener('click', () => {
       try { const n = importText($('#paste').value); $('#paste').value = ''; refreshPacks(); msg('Imported "' + n + '" and applied it.'); }
